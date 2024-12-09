@@ -1,0 +1,51 @@
+/* Container for both map and chart */
+#map-container {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    width: 100%;
+    height: auto;
+    margin: 0 auto;
+}
+
+/* Map styles */
+#map {
+    flex: 1.5; /* Map takes 60% of the space */
+    height: 600px;
+    border: 1px solid #ccc;
+}
+
+/* Chart styles */
+#chart {
+    flex: 1; /* Chart takes 40% of the space */
+    height: 600px;
+    border: 1px solid #ccc;
+    background-color: #f9f9f9;
+}
+
+/* Graticule (grid lines) styles */
+.graticule {
+    fill: none;
+    stroke: #ccc; /* Light gray color for grid lines */
+    stroke-width: 0.5;
+}
+
+/* County styles for choropleth map */
+.county {
+    fill: #ccc; /* Default color for counties */
+    stroke: #fff; /* White stroke for county boundaries */
+}
+
+/* Hover effect for counties */
+.county:hover {
+    opacity: 0.7; /* Slightly transparent on hover */
+    cursor: pointer; /* Change cursor to pointer */
+}
+
+/* Chart Title Styles */
+.chartTitle {
+    font-size: 1.5em;
+    font-weight: bold;
+    text-align: left;
+    margin-left: 10px;
+}

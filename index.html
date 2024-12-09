@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Choropleth Map</title>
+    <!-- Include D3.js -->
+    <script src="https://d3js.org/d3.v6.min.js"></script>
+    <!-- Include TopoJSON -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js"></script>
+    <!-- Include any CSS styles -->
+    <link rel="stylesheet" href="css/styles.css">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+        }
+
+        h1 {
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <h1>Texas County Choropleth Map</h1>
+    <p style="text-align: center;">This map visualizes median home prices in Texas using a choropleth approach at a county-level.</p>
+    <div id="map-container">
+        <div id="map"></div>
+    </div>
+    <div id="chart-container">
+        <div id="chart"></div>
+    </div>
+    
+    <!-- Link your JavaScript file -->
+    <script src="js/main.js"></script>
+</body>
+</html>
