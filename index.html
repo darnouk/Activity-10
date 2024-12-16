@@ -12,25 +12,25 @@
     <link rel="stylesheet" href="css/styles.css">
     <style>
         body {
-            font-family: Arial, sans-serif;
+            font-family: 'Lone Star', 'Lucida Console', Monaco, monospace; /* my attempt at a texas styled font */
         }
 
         h1 {
-            text-align: center;
+            text-align: center; /* center the title */
         }
     </style>
 </head>
 <body>
-    <h1>Texas County Choropleth Map</h1>
-    <p style="text-align: center;">This map visualizes median home prices in Texas using a choropleth approach at a county-level.</p>
+    <h1>Texas County Choropleth Map</h1> <!-- title of the map -->
+    <div id="dropdown-container">
+        <!-- <label for="attribute-dropdown">Select Attribute:</label> 
+        <select id="attribute-dropdown" class="attribute-dropdown"></select> -->
+    </div>
     <div id="map-container">
         <div id="map"></div>
-    </div>
-    <div id="chart-container">
         <div id="chart"></div>
     </div>
-    
-    <!-- Link your JavaScript file -->
     <script src="js/main.js"></script>
 </body>
+
 </html>

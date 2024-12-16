@@ -1,34 +1,40 @@
-// Begin script when window loads
+// Global variables for dynamic attributes
+let selectedAttribute = "MedianHomePrice";
+
+// Mapping for display names
+const attributeDisplayNames = {
+    "MedianHomePrice": "Median Home Price",
+    "Pop 2023": "Population (2023)",
+    "Poverty": "Poverty Rate",
+    "Median Household Income (2021)": "Median Household Income (2021)",
+    "% of State Median HH Income": "% of State Median HH Income"
+};
+
 window.onload = setMap;
 
-// Set up choropleth map
 function setMap() {
-    // Use Promise.all to parallelize asynchronous data loading
     var promises = [
-        d3.csv("data/CountyData.csv"), // Load CSV data
-        d3.json("data/tx_counties.topojson"), // Load Texas counties TopoJSON
-        d3.json("data/usa_states.topojson") // Load USA states TopoJSON
+        d3.csv("data/CountyData.csv"), // CSV data
+        d3.json("data/tx_counties.topojson"), // Texas counties TopoJSON
+        d3.json("data/usa_states.topojson") // USA states TopoJSON
     ];
 
-    // Call `callback` once data is loaded
     Promise.all(promises)
         .then(callback)
         .catch(function (error) {
-            console.error("Error loading data: ", error); // Log any errors
+            console.error("Error loading data: ", error);
         });
 }
 
-// Define callback function to process and visualize data
 function callback(data) {
-    var csvData = data[0]; // CountyData.csv
-    var txTopojsonData = data[1]; // tx_counties.topojson
-    var statesTopojsonData = data[2]; // usa_states.topojson
+    var csvData = data[0];
+    var txTopojsonData = data[1];
+    var statesTopojsonData = data[2];
 
-    // Set dimensions for the map
+    // Set map dimensions
     var mapWidth = document.getElementById("map").offsetWidth,
         height = 600;
 
-    // Create an SVG element to hold the map
     var svg = d3.select("#map")
         .append("svg")
         .attr("width", mapWidth)
@@ -38,39 +44,75 @@ function callback(data) {
     var counties = topojson.feature(txTopojsonData, txTopojsonData.objects.tx_counties).features;
     var states = topojson.feature(statesTopojsonData, statesTopojsonData.objects.states).features;
 
-    // Define a projection and path generator
+    // Set projection and path generator
     var projection = d3.geoAlbersUsa()
         .fitSize([mapWidth, height], topojson.feature(txTopojsonData, txTopojsonData.objects.tx_counties));
+    var path = d3.geoPath().projection(projection);
 
-    var path = d3.geoPath().projection(projection); // Create a path generator
+    // Draw state boundaries
+    svg.selectAll(".state")
+        .data(states)
+        .enter()
+        .append("path")
+        .attr("class", "state")
+        .attr("d", path)
+        .style("fill", "none")
+        .style("stroke", "#000")
+        .style("stroke-width", 2);
 
-    // Add state boundaries to the map
-    svg.selectAll(".state") // Create a path for each state
-        .data(states) // Bind GeoJSON data to the SVG elements
-        .enter() // Create new SVG elements
-        .append("path") // Append SVG path elements
-        .attr("class", "state") // Assign "state" class
-        .attr("d", path) // Project data as geometry in SVG
-        .style("fill", "none") // No fill color
-        .style("stroke", "#000") // Black stroke color
-        .style("stroke-width", 2); // Stroke width of 2
+    // Process CSV data and join with GeoJSON
+    processCSVData(csvData, counties);
 
-    // Extract all MedianHomePrice values for the domain
-    var homePrices = csvData.map(d => +d.MedianHomePrice);
+    // Draw the initial map and chart
+    drawMap(svg, counties, path);
+    setChart(counties, getColorScale(counties));
 
-    // Define a color scale for the choropleth using Quantile
-    var colorScale = d3.scaleQuantile()
-        .domain(homePrices)
-        .range(d3.schemeBlues[9]); // Use a blue color scheme
+    // Create dropdown for attributes
+    createDropdown(csvData, counties, svg, path);
+}
 
-    // Join CSV data to GeoJSON based on county name
-    counties.forEach(function (county) {
-        var countyName = county.properties.COUNTY; // Get the county name
-        var csvEntry = csvData.find(row => row.COUNTY === countyName); // Find the CSV entry for the county
-        county.properties.MedianHomePrice = csvEntry ? +csvEntry.MedianHomePrice : 0; // Assign the MedianHomePrice to the GeoJSON properties
+function processCSVData(csvData, counties) {
+    // Clean and join CSV data with GeoJSON
+    csvData.forEach(d => {
+        d.MedianHomePrice = +d.MedianHomePrice;
+        d["Pop 2023"] = +d["Pop 2023"].replace(/,/g, "");
+        d.Poverty = +d.Poverty;
+        d["Median Household Income (2021)"] = +d["Median Household Income (2021)"].replace(/[\$,]/g, "");
+        d["% of State Median HH Income"] = +d["% of State Median HH Income"].replace("%", "");
+
+        var countyMatch = counties.find(c => c.properties.COUNTY === d.COUNTY);
+        if (countyMatch) {
+            Object.assign(countyMatch.properties, d);
+        }
     });
+}
 
-    // Draw counties on the map
+function createDropdown(csvData, counties, svg, path) {
+    var attributes = Object.keys(csvData[0]).filter(attr => attr !== "COUNTY");
+
+    // Add dropdown
+    var dropdown = d3.select("body")
+        .append("select")
+        .attr("class", "attribute-dropdown")
+        .on("change", function () {
+            selectedAttribute = this.value;
+            updateVisualization(svg, counties, path);
+        });
+
+    dropdown.selectAll("option")
+        .data(attributes)
+        .enter()
+        .append("option")
+        .attr("value", d => d)
+        .text(d => attributeDisplayNames[d] || d); // Use display name if available
+}
+
+function drawMap(svg, counties, path) {
+    var colorScale = getColorScale(counties);
+
+    // Clear previous map paths
+    svg.selectAll(".county").remove();
+
     svg.selectAll(".county")
         .data(counties)
         .enter()
@@ -78,110 +120,108 @@ function callback(data) {
         .attr("class", "county")
         .attr("d", path)
         .style("fill", d => {
-            if (!d.properties.MedianHomePrice || isNaN(d.properties.MedianHomePrice)) {
-                return "#ccc"; // Gray for missing data
-            }
-            return colorScale(d.properties.MedianHomePrice);
+            var value = d.properties[selectedAttribute];
+            return value ? colorScale(value) : "#ccc";
         })
         .style("stroke", "#fff")
         .on("mouseover", function (event, d) {
-            // Show tooltip with county data
             tooltip.style("display", "block")
-                .html(
-                    `<strong>County:</strong> ${d.properties.COUNTY || "N/A"}<br>
-                    <strong>Median Home Price:</strong> ${d.properties.MedianHomePrice ? `$${d.properties.MedianHomePrice.toLocaleString()}` : "No data"}` // Format MedianHomePrice as currency or show "No data"
-                )
+                .html(`<strong>County:</strong> ${d.properties.COUNTY || "N/A"}<br>
+                       <strong>${attributeDisplayNames[selectedAttribute] || selectedAttribute}:</strong> ${formatValue(d.properties[selectedAttribute], selectedAttribute)}`)
                 .style("left", (event.pageX + 10) + "px")
                 .style("top", (event.pageY - 28) + "px");
         })
-        .on("mousemove", function (event) { // when user hovers over a county it will show the tooltip
-            // Update tooltip position
+        .on("mousemove", function (event) {
             tooltip.style("left", (event.pageX + 10) + "px")
                 .style("top", (event.pageY - 28) + "px");
         })
-        .on("mouseout", function () { // when user moves the mouse out of the county it will hide the tooltip
-            // Hide tooltip
+        .on("mouseout", function () {
             tooltip.style("display", "none");
         });
-
-    // Create the bar chart
-    setChart(csvData, colorScale);
 }
-// THIS IS WHERE THE CHART IS CREATED
-function setChart(csvData, colorScale) {
+
+function updateVisualization(svg, counties, path) {
+    // Redraw map
+    drawMap(svg, counties, path);
+
+    // Redraw the chart
+    setChart(counties, getColorScale(counties));
+}
+
+function setChart(counties, colorScale) {
+    var csvData = counties.map(d => d.properties);
+
     var chartWidth = document.getElementById("chart").offsetWidth,
         chartHeight = 400,
-        leftPadding = 40, // Increased padding for the axis
-        rightPadding = 5,
-        topBottomPadding = 20,
+        leftPadding = 60, // Increased padding for Y-axis
+        rightPadding = 20,
         chartInnerWidth = chartWidth - leftPadding - rightPadding,
-        chartInnerHeight = chartHeight - topBottomPadding * 2,
-        translate = "translate(" + leftPadding + "," + topBottomPadding + ")";
+        chartInnerHeight = chartHeight - 40;
 
-    // Create an SVG container for the chart
+    d3.select("#chart").selectAll("*").remove(); // Clear previous chart
     var chart = d3.select("#chart")
         .append("svg")
         .attr("width", chartWidth)
-        .attr("height", chartHeight)
-        .attr("class", "chart");
+        .attr("height", chartHeight);
 
-    // Create a background rectangle
-    chart.append("rect")
-        .attr("class", "chartBackground")
-        .attr("width", chartInnerWidth)
-        .attr("height", chartInnerHeight)
-        .attr("transform", translate)
-        .style("fill", "#f9f9f9");
-
-    // Create a scale to size bars proportionally to the frame
     var yScale = d3.scaleLinear()
         .range([chartInnerHeight, 0])
-        .domain([0, d3.max(csvData, d => +d.MedianHomePrice)]);
+        .domain([0, d3.max(csvData, d => d[selectedAttribute])]);
 
-    // Draw bars for each county
+    // Add bars
     chart.selectAll(".bar")
-        .data(csvData) // Bind data to the SVG elements
+        .data(csvData.sort((a, b) => b[selectedAttribute] - a[selectedAttribute]))
         .enter()
-        .append("rect") // Create a rectangle shape for each data value
+        .append("rect")
         .attr("class", "bar")
-        .attr("x", (d, i) => i * (chartInnerWidth / csvData.length * 0.9) + leftPadding) // Adjust spacing... play around with this value to get the desired look
-        .attr("y", d => yScale(+d.MedianHomePrice) + topBottomPadding) // Position bars based on MedianHomePrice
-        .attr("height", d => chartInnerHeight - yScale(+d.MedianHomePrice)) // Set bar height based on MedianHomePrice
-        .attr("width", chartInnerWidth / csvData.length * 0.6) // Set bar width. play around with this value and above to get the desired look
-        .style("fill", d => colorScale(+d.MedianHomePrice)) // Fill bars with color based on MedianHomePrice
+        .attr("x", (d, i) => leftPadding + i * (chartInnerWidth / csvData.length)) // Start after Y-axis
+        .attr("y", d => yScale(d[selectedAttribute]))
+        .attr("height", d => chartInnerHeight - yScale(d[selectedAttribute]))
+        .attr("width", chartInnerWidth / csvData.length - 1)
+        .style("fill", d => colorScale(d[selectedAttribute]))
         .on("mouseover", function (event, d) {
-            // Show tooltip with bar data
             tooltip.style("display", "block")
-                .html(
-                    `<strong>County:</strong> ${d.COUNTY}<br>
-                    <strong>Median Home Price:</strong> $${(+d.MedianHomePrice).toLocaleString()}`
-                )
+                .html(`<strong>County:</strong> ${d.COUNTY}<br>
+                       <strong>${attributeDisplayNames[selectedAttribute] || selectedAttribute}:</strong> ${formatValue(d[selectedAttribute], selectedAttribute)}`)
                 .style("left", (event.pageX + 10) + "px")
                 .style("top", (event.pageY - 28) + "px");
         })
-        .on("mousemove", function (event) { // when user hovers over a bar it will show the tooltip
-            // Update tooltip position
-            tooltip.style("left", (event.pageX + 10) + "px") // Offset tooltip 10px to the right for readability
-                .style("top", (event.pageY - 28) + "px"); // and also Offset tooltip 28px up for readability
+        .on("mousemove", function (event) {
+            tooltip.style("left", (event.pageX + 10) + "px")
+                .style("top", (event.pageY - 28) + "px");
         })
         .on("mouseout", function () {
-            // Hide tooltip
-            tooltip.style("display", "none"); // when user moves the mouse out of the bar it will hide the tooltip
+            tooltip.style("display", "none");
         });
 
-    // Create a vertical axis
-    var yAxis = d3.axisLeft().scale(yScale);
+    // Add Y-axis
+    var yAxis = d3.axisLeft(yScale)
+        .tickFormat(d => formatValue(d, selectedAttribute).replace("$", "").replace("%", ""));
 
-    // Place the Y-axis
     chart.append("g")
         .attr("class", "axis")
-        .attr("transform", `translate(${leftPadding}, ${topBottomPadding})`)
+        .attr("transform", `translate(${leftPadding}, 0)`) // Place Y-axis inside padding
         .call(yAxis);
 }
 
+function getColorScale(counties) {
+    var values = counties.map(d => d.properties[selectedAttribute]).filter(v => !isNaN(v));
+    return d3.scaleQuantile()
+        .domain(values)
+        .range(d3.schemeBlues[9]);
+}
 
+function formatValue(value, attribute) {
+    if (attribute === "MedianHomePrice" || attribute === "Median Household Income (2021)") {
+        return value ? `$${d3.format(",.0f")(value)}` : "No data"; // Dollar sign with commas
+    } else if (attribute === "Poverty" || attribute === "% of State Median HH Income") {
+        return value ? `${d3.format(".1f")(value)}%` : "No data"; // Percent with 1 decimal
+    } else {
+        return value ? d3.format(",.0f")(value) : "No data"; // Commas for other values
+    }
+}
 
-// Create the tooltip variable to show the data when the user hovers over a county or a bar
+// Tooltip
 var tooltip = d3.select("body").append("div")
     .attr("class", "tooltip")
     .style("position", "absolute")
